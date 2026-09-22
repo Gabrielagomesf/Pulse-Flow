@@ -53,6 +53,17 @@ jobs:
           CI: "1"
         run: npx expo prebuild --platform android --clean
 
+      - name: Patch Android splash resources
+        working-directory: MoveGoApp
+        run: |
+          mkdir -p android/app/src/main/res/values
+          cat > android/app/src/main/res/values/movego_splash_colors.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="splashscreen_background">#FFFFFF</color>
+          </resources>
+          EOF
+
       - name: Build installable APK
         working-directory: MoveGoApp/android
         run: |

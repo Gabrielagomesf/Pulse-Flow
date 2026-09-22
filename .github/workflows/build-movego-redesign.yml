@@ -1,0 +1,73 @@
+name: Build MoveGo Redesigned APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "redesign_payload/**"
+      - ".github/workflows/build-movego-redesign.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore source
+        run: |
+          cat redesign_payload/chunk_00.b64 redesign_payload/chunk_01.b64 redesign_payload/chunk_02.b64 redesign_payload/chunk_03.b64 | tr -d '\n\r' > movego_redesign.b64
+          test "$(wc -c < movego_redesign.b64)" -eq 33596
+          base64 -d movego_redesign.b64 > MoveGoFlutter_redesign.zip
+          echo "7ed16d97267b1a7f3a43b7e973b28e480369cd8a29e433db9dd69de3abbb66d4  MoveGoFlutter_redesign.zip" | sha256sum -c -
+          unzip -q MoveGoFlutter_redesign.zip
+          test -f MoveGoFlutter/lib/main.dart
+
+      - name: Generate Android project
+        working-directory: MoveGoFlutter
+        run: |
+          flutter create . --platforms=android --org com.movego --project-name movego
+          rm -rf test analysis_options.yaml
+
+      - name: Get packages
+        working-directory: MoveGoFlutter
+        run: flutter pub get
+
+      - name: Analyze Dart
+        working-directory: MoveGoFlutter
+        run: flutter analyze lib
+
+      - name: Build release APK
+        working-directory: MoveGoFlutter
+        run: flutter build apk --release
+
+      - name: Prepare artifact
+        run: |
+          cp MoveGoFlutter/build/app/outputs/flutter-apk/app-release.apk MoveGo-Redesign-Release.apk
+          sha256sum MoveGo-Redesign-Release.apk > MoveGo-Redesign-Release.sha256
+          ls -lh MoveGo-Redesign-Release.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoveGo-Redesign-Release
+          path: |
+            MoveGo-Redesign-Release.apk
+            MoveGo-Redesign-Release.sha256
+          if-no-files-found: error
+          retention-days: 7

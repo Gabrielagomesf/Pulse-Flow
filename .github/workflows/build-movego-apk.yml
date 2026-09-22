@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -28,9 +30,11 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Restore MoveGo project
+      - name: Restore original MoveGo project
         run: |
-          base64 -d movego_payload.b64 > MoveGoApp.zip
+          git show eab3b964fb5db70447766b7d63bd1577d6075b83:movego_payload.b64 > movego_payload.original.b64
+          echo "Payload bytes: $(wc -c < movego_payload.original.b64)"
+          base64 -d movego_payload.original.b64 > MoveGoApp.zip
           unzip -q MoveGoApp.zip
           ls -la MoveGoApp
 

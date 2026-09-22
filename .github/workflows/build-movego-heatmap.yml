@@ -1,0 +1,120 @@
+name: Build MoveGo Heatmap Flow APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "heatmap_patch/**"
+      - ".github/workflows/build-movego-heatmap.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore redesigned base source
+        run: |
+          cat redesign_payload/chunk_00.b64 redesign_payload/chunk_01.b64 redesign_payload/chunk_02.b64 redesign_payload/chunk_03.b64 | tr -d '\n\r' > movego_redesign.b64
+          test "$(wc -c < movego_redesign.b64)" -eq 33596
+          base64 -d movego_redesign.b64 > MoveGoFlutter.zip
+          echo "7ed16d97267b1a7f3a43b7e973b28e480369cd8a29e433db9dd69de3abbb66d4  MoveGoFlutter.zip" | sha256sum -c -
+          unzip -q MoveGoFlutter.zip
+          test -f MoveGoFlutter/lib/main.dart
+
+      - name: Apply role flow and heatmap patches
+        run: |
+          base64 -d loginflow_patch/main.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/main.dart
+          base64 -d loginflow_patch/secondary_screens.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/secondary_screens.dart
+          base64 -d heatmap_patch/auth_screen.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/auth_screen.dart
+          base64 -d heatmap_patch/driver_shell.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/driver_shell.dart
+          base64 -d heatmap_patch/search_screen.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/search_screen.dart
+          base64 -d heatmap_patch/ride_options_screen.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/ride_options_screen.dart
+          base64 -d heatmap_patch/ui.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/widgets/ui.dart
+          grep -q "showHeatmap" MoveGoFlutter/lib/widgets/ui.dart
+          grep -q "_DriverRideStage" MoveGoFlutter/lib/screens/driver_shell.dart
+          grep -q "123456" MoveGoFlutter/lib/screens/auth_screen.dart
+
+      - name: Generate Android project
+        working-directory: MoveGoFlutter
+        run: |
+          flutter create . --platforms=android --org com.movego --project-name movego
+          rm -rf test analysis_options.yaml
+          sed -i 's/android:label="movego"/android:label="MoveGo"/' android/app/src/main/AndroidManifest.xml
+
+      - name: Add MoveGo adaptive launcher icon
+        working-directory: MoveGoFlutter
+        run: |
+          mkdir -p android/app/src/main/res/mipmap-anydpi-v26
+          mkdir -p android/app/src/main/res/drawable
+          mkdir -p android/app/src/main/res/values
+          cat > android/app/src/main/res/values/movego_icon_colors.xml <<'EOF'
+          <resources>
+            <color name="movego_icon_bg">#00A86B</color>
+          </resources>
+          EOF
+          cat > android/app/src/main/res/drawable/movego_icon_foreground.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+            <path android:fillColor="#FFFFFF"
+              android:pathData="M54,18C39,18 27,30 27,45c0,19 27,42 27,42s27,-23 27,-42C81,30 69,18 54,18z"/>
+            <path android:fillColor="#00A86B"
+              android:pathData="M54,30c-9,0 -16,7 -16,16s7,16 16,16 16,-7 16,-16 -7,-16 -16,-16z"/>
+            <path android:fillColor="#FFFFFF"
+              android:pathData="M44,43l3,-7h14l3,7 4,2v10h-4v-3H44v3h-4V45zM47,45h14l-2,-5H49z"/>
+          </vector>
+          EOF
+          cat > android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml <<'EOF'
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+            <background android:drawable="@color/movego_icon_bg"/>
+            <foreground android:drawable="@drawable/movego_icon_foreground"/>
+          </adaptive-icon>
+          EOF
+          cp android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
+      - name: Get packages
+        working-directory: MoveGoFlutter
+        run: flutter pub get
+
+      - name: Analyze Dart
+        working-directory: MoveGoFlutter
+        run: flutter analyze lib
+
+      - name: Build release APK
+        working-directory: MoveGoFlutter
+        run: flutter build apk --release
+
+      - name: Prepare artifact
+        run: |
+          cp MoveGoFlutter/build/app/outputs/flutter-apk/app-release.apk MoveGo-Heatmap-Flow-Release.apk
+          sha256sum MoveGo-Heatmap-Flow-Release.apk > MoveGo-Heatmap-Flow-Release.sha256
+          ls -lh MoveGo-Heatmap-Flow-Release.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoveGo-Heatmap-Flow-Release
+          path: |
+            MoveGo-Heatmap-Flow-Release.apk
+            MoveGo-Heatmap-Flow-Release.sha256
+          if-no-files-found: error
+          retention-days: 7

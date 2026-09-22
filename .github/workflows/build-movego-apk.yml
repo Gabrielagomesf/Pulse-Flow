@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "movego_payload.b64"
+      - "payload/**"
       - ".github/workflows/build-movego-apk.yml"
   workflow_dispatch:
 
@@ -16,8 +16,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -30,12 +28,15 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Restore original MoveGo project
+      - name: Restore MoveGo project
         run: |
-          git show eab3b964fb5db70447766b7d63bd1577d6075b83:movego_payload.b64 > movego_payload.original.b64
-          echo "Payload bytes: $(wc -c < movego_payload.original.b64)"
-          base64 -d movego_payload.original.b64 > MoveGoApp.zip
+          cat payload/chunk_00.b64 payload/chunk_01.b64 payload/chunk_02.b64 payload/chunk_03.b64 | tr -d '\n\r' > movego_payload.full.b64
+          echo "Base64 bytes: $(wc -c < movego_payload.full.b64)"
+          test "$(wc -c < movego_payload.full.b64)" -eq 27752
+          base64 -d movego_payload.full.b64 > MoveGoApp.zip
+          echo "be8bdb67b42c23e47bd6849cdde45ed77ff6d206d3af575d3fa9e688bbdb22dc  MoveGoApp.zip" | sha256sum -c -
           unzip -q MoveGoApp.zip
+          test -f MoveGoApp/package.json
           ls -la MoveGoApp
 
       - name: Install dependencies
@@ -55,7 +56,9 @@ jobs:
           ./gradlew assembleDebug --no-daemon
 
       - name: Rename APK
-        run: cp MoveGoApp/android/app/build/outputs/apk/debug/app-debug.apk MoveGo.apk
+        run: |
+          cp MoveGoApp/android/app/build/outputs/apk/debug/app-debug.apk MoveGo.apk
+          ls -lh MoveGo.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

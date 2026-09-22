@@ -1,0 +1,72 @@
+name: Build MoveGo Flutter APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "flutter_payload/**"
+      - ".github/workflows/build-movego-flutter.yml"
+  workflow_dispatch:
+
+jobs:
+  build-flutter-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Restore MoveGo Flutter source
+        run: |
+          cat flutter_payload/chunk_00.b64 flutter_payload/chunk_01.b64 flutter_payload/chunk_02.b64 | tr -d '\n\r' > movego_flutter.b64
+          test "$(wc -c < movego_flutter.b64)" -eq 22004
+          base64 -d movego_flutter.b64 > MoveGoFlutter.zip
+          echo "1c02ced7fd00e701dd74498c65dd71714b074bb71887fc3f09253ccfbd124a00  MoveGoFlutter.zip" | sha256sum -c -
+          unzip -q MoveGoFlutter.zip
+          test -f MoveGoFlutter/pubspec.yaml
+          test -f MoveGoFlutter/lib/main.dart
+
+      - name: Generate Android project
+        working-directory: MoveGoFlutter
+        run: flutter create . --platforms=android --org com.movego --project-name movego
+
+      - name: Get packages
+        working-directory: MoveGoFlutter
+        run: flutter pub get
+
+      - name: Analyze Dart
+        working-directory: MoveGoFlutter
+        run: flutter analyze
+
+      - name: Build standalone release APK
+        working-directory: MoveGoFlutter
+        run: flutter build apk --release
+
+      - name: Prepare APK
+        run: |
+          cp MoveGoFlutter/build/app/outputs/flutter-apk/app-release.apk MoveGo-Dart-Release.apk
+          ls -lh MoveGo-Dart-Release.apk
+          sha256sum MoveGo-Dart-Release.apk > MoveGo-Dart-Release.sha256
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoveGo-Dart-Release
+          path: |
+            MoveGo-Dart-Release.apk
+            MoveGo-Dart-Release.sha256
+          if-no-files-found: error
+          retention-days: 7

@@ -41,7 +41,11 @@ jobs:
 
       - name: Install dependencies
         working-directory: MoveGoApp
-        run: npm install --no-audit --no-fund
+        run: |
+          npm install --no-audit --no-fund
+          npx expo install --fix
+          npx expo install expo-font expo-system-ui
+          npm ls expo expo-font expo-modules-core react-native || true
 
       - name: Generate Android project
         working-directory: MoveGoApp

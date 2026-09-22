@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -41,10 +43,12 @@ jobs:
       - name: Apply login and role flow
         run: |
           base64 -d loginflow_patch/main.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/main.dart
-          base64 -d loginflow_patch/auth_screen.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/auth_screen.dart
+          git show c743cf21b438a84b607e4bcd2f64e525eabcfbb3:loginflow_patch/auth_screen.dart.gz.b64 | base64 -d | gzip -d > MoveGoFlutter/lib/screens/auth_screen.dart
+          sed -i 's/Icons\.steering_rounded/Icons.local_taxi_rounded/g' MoveGoFlutter/lib/screens/auth_screen.dart
           base64 -d loginflow_patch/driver_shell.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/driver_shell.dart
           base64 -d loginflow_patch/secondary_screens.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/secondary_screens.dart
           base64 -d loginflow_patch/ride_options_screen.dart.gz.b64 | gzip -d > MoveGoFlutter/lib/screens/ride_options_screen.dart
+          grep -q "Icons.local_taxi_rounded" MoveGoFlutter/lib/screens/auth_screen.dart
 
       - name: Generate Android project
         working-directory: MoveGoFlutter
